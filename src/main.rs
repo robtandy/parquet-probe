@@ -13,7 +13,7 @@ use parquet::file::{
 use ratatui::layout::Rect;
 use ratatui::style::palette::tailwind::{self, Palette};
 use ratatui::text::{Text, ToLine};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Paragraph, Wrap};
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Direction, Layout},
@@ -24,44 +24,32 @@ use ratatui::{
 };
 
 #[derive(FromArgs, Clone)]
-/// a command with a description? what do i put here
+/// Visualize metadata from one or more parquet files
 struct Args {
     #[argh(positional, greedy)]
     paths: Vec<String>,
 
     #[argh(option)]
-    /// which row group to examine
+    /// row group to examine
     row_group: usize,
 
     #[argh(option)]
-    /// which column number to examine
+    /// column number to examine
     column: usize,
 }
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    let mut terminal = ratatui::init();
 
     let args = argh::from_env();
 
     let app = App::new(args);
+
+    let mut terminal = ratatui::init();
     let result = app.run(terminal);
     ratatui::restore();
     result
 }
-
-/*fn get_page_stats(metadata: &ParquetMetaData, rg: usize, col_num: usize) -> PageData {
-    let rg = metadata.row_group(rg);
-
-    let cc_meta = rg.column(col_num);
-
-    let mut page_data = PageData::default();
-    if let Some(stats) = cc_meta.page_encoding_stats() {
-        page_data.num_pages = stats.len() as u64;
-        page_data.num_values = stats.iter().map(|x| x.count as u64).sum();
-    }
-    page_data
-}*/
 
 struct ParqFile {
     path: String,
@@ -177,6 +165,8 @@ impl App {
             let pf = &mut self.files[self.focused_file];
 
             if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
+                self.should_exit = true;
+            } else if key.kind == KeyEventKind::Press && key.code == KeyCode::Esc {
                 self.should_exit = true;
             } else if key.kind == KeyEventKind::Press && key.code == KeyCode::Up {
                 pf.current_row_group += 1;
@@ -295,7 +285,7 @@ impl App {
             .enumerate()
             .for_each(|(i, page_area)| {
                 let page = &parqfile.pages[i];
-                let [left, right] = Layout::horizontal([Percentage(25), Percentage(75)])
+                let [left, right] = Layout::horizontal([Percentage(20), Percentage(80)])
                     .spacing(1)
                     .areas(*page_area);
                 //let block_left = Block::new().bg(colors[i % colors.len()]);
@@ -315,6 +305,7 @@ fn page_text(page: &Page) -> Paragraph {
         Page::DataPageV2 { .. } => format!("DataPageV2\n"),
         Page::DictionaryPage { .. } => dict_page_text(page),
     })
+    .wrap(Wrap { trim: true })
 }
 
 fn dict_page_text(page: &Page) -> String {
@@ -345,7 +336,7 @@ fn data_page_text(page: &Page) -> String {
     } = page
     {
         format!(
-            "DataPage [{}], values:{}\npage stats:{}",
+            "DataPage [{}], values:{}, page stats:{}",
             encoding,
             num_values,
             statistics
